@@ -1,299 +1,558 @@
-import { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Wifi, Upload, Download, Clock, Activity, Package, Calendar, Server } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { Play, Pause, Wifi, Activity, TrendingUp, Clock, MapPin, Award } from 'lucide-react';
 
-// Main SpeedTest dashboard component
-export default function SpeedTestDashboard() {
-  // State for speed test results and status
-  const [testStatus, setTestStatus] = useState('idle'); // idle, testing, completed, error
-  const [results, setResults] = useState({
+const NETPULSE = () => {
+  const [isTestRunning, setIsTestRunning] = useState(false);
+  const [currentTest, setCurrentTest] = useState({
     download: 0,
     upload: 0,
     latency: 0,
     jitter: 0,
-    packetLoss: 0,
-    timestamp: null,
-    device: '',
-    networkType: '',
-    isp: '',
-    serverLocation: ''
+    packetLoss: 0
   });
   const [testHistory, setTestHistory] = useState([]);
-  const [selectedISP, setSelectedISP] = useState('All');
-  const [topISPs, setTopISPs] = useState([]);
+  const [selectedMetric, setSelectedMetric] = useState('download');
+  const [ispRankings, setIspRankings] = useState([]);
+  const [networkInfo, setNetworkInfo] = useState({
+    isp: 'Detecting...',
+    type: 'WiFi',
+    location: 'Unknown',
+    ip: 'Fetching...'
+  });
+  const intervalRef = useRef(null);
 
-  // Detect network information
-  useEffect(() => {
-    const deviceInfo = {
-      device: `${navigator.platform} - ${navigator.userAgent.split(') ')[0].split('(')[1]}`,
-      networkType: navigator.connection ? 
-        navigator.connection.effectiveType || 'Unknown' : 
-        'Unknown'
-    };
-    
-    setResults(prev => ({...prev, ...deviceInfo}));
-  }, []);
+  // Mock ISP data
+  const mockISPs = [
+    { name: 'Fiber Pro', avgSpeed: 950, reliability: 98, region: 'Urban' },
+    { name: 'Cable Connect', avgSpeed: 420, reliability: 94, region: 'Urban' },
+    { name: 'DSL Plus', avgSpeed: 85, reliability: 89, region: 'Rural' },
+    { name: 'Mobile Max', avgSpeed: 180, reliability: 92, region: 'Mobile' },
+    { name: 'Satellite Link', avgSpeed: 45, reliability: 85, region: 'Rural' }
+  ];
 
-  // Load test history from localStorage on component mount
-  useEffect(() => {
-    const savedHistory = localStorage.getItem('speedTestHistory');
-    if (savedHistory) {
-      try {
-        setTestHistory(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error('Error parsing saved history:', e);
-      }
+  // Generate mock historical data
+  const generateMockHistory = () => {
+    const history = [];
+    const now = new Date();
+    for (let i = 23; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+      history.push({
+        timestamp: time.toISOString(),
+        download: Math.random() * 400 + 100,
+        upload: Math.random() * 50 + 20,
+        latency: Math.random() * 30 + 10,
+        jitter: Math.random() * 5 + 1,
+        packetLoss: Math.random() * 2,
+        hour: time.getHours(),
+        time: `${time.getHours()}:00`
+      });
     }
-    
-    // Simulate fetching top ISP data
-    const mockTopISPs = [
-      { name: 'Fiber Co', downloadAvg: 940, uploadAvg: 910, latencyAvg: 5 },
-      { name: 'Cable Net', downloadAvg: 520, uploadAvg: 35, latencyAvg: 15 },
-      { name: 'DSL Provider', downloadAvg: 120, uploadAvg: 20, latencyAvg: 30 },
-      { name: 'Wireless ISP', downloadAvg: 80, uploadAvg: 15, latencyAvg: 45 },
-    ];
-    setTopISPs(mockTopISPs);
-  }, []);
+    return history;
+  };
 
-  // Save test history to localStorage when it changes
-  useEffect(() => {
-    if (testHistory.length > 0) {
-      localStorage.setItem('speedTestHistory', JSON.stringify(testHistory));
-    }
-  }, [testHistory]);
-
-  // Function to start the speed test
-  const startSpeedTest = async () => {
-    setTestStatus('testing');
+  // Simulate speed test
+  const runSpeedTest = () => {
+    setIsTestRunning(true);
+    let progress = 0;
     
-    try {
-      // This would be replaced with actual API calls to your speed test backend
-      // Simulating a speed test with timeout delays for demonstration
-      await simulateSpeedTest();
+    intervalRef.current = setInterval(() => {
+      progress += 2;
       
-      // After test completes, add to history
-      const newTest = {...results, timestamp: new Date().toISOString()};
-      setTestHistory(prev => [newTest, ...prev].slice(0, 100)); // Keep last 100 tests
-      setTestStatus('completed');
-    } catch (error) {
-      console.error('Speed test failed:', error);
-      setTestStatus('error');
+      const downloadTarget = Math.random() * 400 + 100;
+      const uploadTarget = Math.random() * 50 + 20;
+      const latencyTarget = Math.random() * 30 + 10;
+      
+      setCurrentTest({
+        download: Math.max(0, (downloadTarget * Math.min(progress / 100, 1)) + Math.random() * 20 - 10),
+        upload: Math.max(0, (uploadTarget * Math.min(progress / 100, 1)) + Math.random() * 5 - 2.5),
+        latency: Math.max(1, latencyTarget + Math.random() * 10 - 5),
+        jitter: Math.max(0, Math.random() * 5 + 1),
+        packetLoss: Math.max(0, Math.random() * 2)
+      });
+
+      if (progress >= 100) {
+        clearInterval(intervalRef.current);
+        setIsTestRunning(false);
+        
+        const newTest = {
+          timestamp: new Date().toISOString(),
+          download: downloadTarget,
+          upload: uploadTarget,
+          latency: latencyTarget,
+          jitter: Math.random() * 5 + 1,
+          packetLoss: Math.random() * 2,
+          hour: new Date().getHours(),
+          time: `${new Date().getHours()}:00`
+        };
+        
+        setTestHistory(prev => [newTest, ...prev.slice(0, 23)]);
+      }
+    }, 100);
+  };
+
+  const stopTest = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      setIsTestRunning(false);
     }
   };
 
-  // Simulate a speed test (this would be replaced by actual API calls)
-  const simulateSpeedTest = async () => {
-    // Simulate download test
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setResults(prev => ({...prev, download: Math.random() * 500 + 100}));
+  // Initialize data
+  useEffect(() => {
+    setTestHistory(generateMockHistory());
+    setIspRankings(mockISPs);
     
-    // Simulate upload test
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setResults(prev => ({...prev, upload: Math.random() * 100 + 20}));
-    
-    // Simulate latency and other metrics
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setResults(prev => ({
-      ...prev, 
-      latency: Math.random() * 50 + 5,
-      jitter: Math.random() * 10 + 1,
-      packetLoss: Math.random() * 2,
-      isp: 'Example ISP',
-      serverLocation: 'Server Location: New York'
-    }));
+    setTimeout(() => {
+      setNetworkInfo({
+        isp: 'Fiber Pro Networks',
+        type: 'Fiber',
+        location: 'New York, NY',
+        ip: '192.168.1.100'
+      });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const getSpeedColor = (speed) => {
+    if (speed > 300) return 'text-green-400';
+    if (speed > 100) return 'text-yellow-400';
+    return 'text-red-400';
   };
 
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString();
+  const getSpeedGrade = (speed) => {
+    if (speed > 300) return 'Excellent';
+    if (speed > 100) return 'Good';
+    if (speed > 50) return 'Fair';
+    return 'Poor';
   };
 
-  // Render metric card with icon and value
-  const MetricCard = ({ icon, title, value, unit, color }) => (
-    <div className="bg-white rounded-lg shadow-md p-4 flex flex-col items-center">
-      <div className={`flex items-center justify-center w-12 h-12 rounded-full mb-2 ${color}`}>
-        {icon}
-      </div>
-      <div className="text-sm text-gray-500">{title}</div>
-      <div className="text-xl font-bold flex items-baseline">
-        {value !== null && value !== undefined ? value.toFixed(2) : '—'}
-        <span className="text-sm ml-1">{unit}</span>
-      </div>
-    </div>
-  );
+  // Generate heatmap hours
+  const generateHeatmapHours = () => {
+    const hours = [];
+    for (let i = 0; i < 24; i++) {
+      let speed = 200;
+      if (i >= 19 && i <= 23) speed *= 0.6; // Evening slowdown
+      if (i >= 8 && i <= 10) speed *= 0.8; // Morning slowdown
+      
+      const intensity = Math.min(speed, 400) / 400;
+      hours.push({
+        hour: i,
+        speed: speed + Math.random() * 50 - 25,
+        intensity
+      });
+    }
+    return hours;
+  };
+
+  const heatmapHours = generateHeatmapHours();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8 text-center">Internet Speed Test & ISP Tracker</h1>
-        
-        {/* Main speed test section */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Speed Test</h2>
-          
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-48 h-48 rounded-full bg-gray-100 flex items-center justify-center mb-4 relative">
-              <div className="text-center">
-                {testStatus === 'idle' && (
-                  <div className="flex flex-col items-center">
-                    <Wifi size={48} className="text-blue-500 mb-2" />
-                    <span>Ready to Test</span>
-                  </div>
-                )}
-                
-                {testStatus === 'testing' && (
-                  <div className="flex flex-col items-center">
-                    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-                    <span className="mt-2">Testing...</span>
-                  </div>
-                )}
-                
-                {testStatus === 'completed' && (
-                  <div className="flex flex-col items-center">
-                    <div className="text-3xl font-bold text-blue-600">{results.download.toFixed(2)}</div>
-                    <div className="text-sm">Mbps Download</div>
-                  </div>
-                )}
-                
-                {testStatus === 'error' && (
-                  <div className="flex flex-col items-center">
-                    <div className="text-red-500">Error</div>
-                    <div className="text-sm">Please try again</div>
-                  </div>
-                )}
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%)', color: 'white', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      {/* Header */}
+      <header style={{ 
+        background: 'rgba(30, 41, 59, 0.5)', 
+        backdropFilter: 'blur(10px)', 
+        borderBottom: '1px solid #374151',
+        padding: '1rem 0'
+      }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ 
+                padding: '0.5rem', 
+                background: '#3b82f6', 
+                borderRadius: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Activity size={24} />
+              </div>
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0' }}>NETPULSE</h1>
+                <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0' }}>Internet Performance Monitor</p>
               </div>
             </div>
-            
-            <button
-              onClick={startSpeedTest}
-              disabled={testStatus === 'testing'}
-              className={`px-6 py-3 rounded-full font-medium ${
-                testStatus === 'testing'
-                  ? 'bg-gray-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {testStatus === 'testing' ? 'Testing...' : 'Start Speed Test'}
-            </button>
-          </div>
-          
-          {/* Results section */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <MetricCard 
-              icon={<Download className="text-white" />} 
-              title="Download" 
-              value={results.download} 
-              unit="Mbps"
-              color="bg-blue-500"
-            />
-            <MetricCard 
-              icon={<Upload className="text-white" />} 
-              title="Upload" 
-              value={results.upload} 
-              unit="Mbps"
-              color="bg-green-500"
-            />
-            <MetricCard 
-              icon={<Clock className="text-white" />} 
-              title="Latency" 
-              value={results.latency} 
-              unit="ms"
-              color="bg-orange-500"
-            />
-            <MetricCard 
-              icon={<Activity className="text-white" />} 
-              title="Jitter" 
-              value={results.jitter} 
-              unit="ms"
-              color="bg-purple-500"
-            />
-            <MetricCard 
-              icon={<Package className="text-white" />} 
-              title="Packet Loss" 
-              value={results.packetLoss} 
-              unit="%"
-              color="bg-red-500"
-            />
-          </div>
-          
-          {/* Additional test info */}
-          {testStatus === 'completed' && (
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div className="flex items-center">
-                <Calendar size={16} className="mr-2 text-gray-500" />
-                <span className="text-gray-500">Date: {formatDate(results.timestamp || new Date())}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.875rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Wifi size={16} color="#60a5fa" />
+                <span>{networkInfo.isp}</span>
               </div>
-              <div className="flex items-center">
-                <Server size={16} className="mr-2 text-gray-500" />
-                <span className="text-gray-500">{results.serverLocation}</span>
-              </div>
-              <div className="flex items-center">
-                <Wifi size={16} className="mr-2 text-gray-500" />
-                <span className="text-gray-500">ISP: {results.isp}</span>
-              </div>
-              <div className="flex items-center">
-                <Activity size={16} className="mr-2 text-gray-500" />
-                <span className="text-gray-500">Network: {results.networkType}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <MapPin size={16} color="#4ade80" />
+                <span>{networkInfo.location}</span>
               </div>
             </div>
-          )}
+          </div>
         </div>
-        
-        {/* History and Analytics Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Historical test results */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Test History</h2>
-            
-            {testHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="p-2 text-left">Date & Time</th>
-                      <th className="p-2 text-right">Download</th>
-                      <th className="p-2 text-right">Upload</th>
-                      <th className="p-2 text-right">Latency</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {testHistory.slice(0, 5).map((test, index) => (
-                      <tr key={index} className="border-t border-gray-100">
-                        <td className="p-2">{formatDate(test.timestamp)}</td>
-                        <td className="p-2 text-right">{test.download?.toFixed(2)} Mbps</td>
-                        <td className="p-2 text-right">{test.upload?.toFixed(2)} Mbps</td>
-                        <td className="p-2 text-right">{test.latency?.toFixed(2)} ms</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      </header>
+
+      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+        {/* Speed Test Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+          {/* Main Speed Test */}
+          <div style={{ 
+            gridColumn: 'span 2',
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '1rem', 
+            padding: '2rem', 
+            border: '1px solid #374151',
+            minWidth: '300px'
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Internet Speed Test</h2>
+              <button
+                onClick={isTestRunning ? stopTest : runSpeedTest}
+                style={{
+                  padding: '1rem 2rem',
+                  borderRadius: '0.75rem',
+                  fontWeight: '600',
+                  fontSize: '1.125rem',
+                  background: isTestRunning ? '#ef4444' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  margin: '0 auto',
+                  transition: 'all 0.2s',
+                  transform: 'scale(1)'
+                }}
+                onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                {isTestRunning ? <Pause size={20} /> : <Play size={20} />}
+                <span>{isTestRunning ? 'Stop Test' : 'Start Test'}</span>
+              </button>
+            </div>
+
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+              gap: '1.5rem',
+              textAlign: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '0.5rem' }}>
+                  {currentTest.download.toFixed(1)}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Mbps Download</div>
+                <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }} className={getSpeedColor(currentTest.download)}>
+                  {getSpeedGrade(currentTest.download)}
+                </div>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                No test history available. Run your first speed test!
+              <div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#4ade80', marginBottom: '0.5rem' }}>
+                  {currentTest.upload.toFixed(1)}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Mbps Upload</div>
               </div>
-            )}
+              <div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#facc15', marginBottom: '0.5rem' }}>
+                  {currentTest.latency.toFixed(0)}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>ms Latency</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#a855f7', marginBottom: '0.5rem' }}>
+                  {currentTest.jitter.toFixed(1)}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>ms Jitter</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f87171', marginBottom: '0.5rem' }}>
+                  {currentTest.packetLoss.toFixed(1)}%
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Packet Loss</div>
+              </div>
+            </div>
           </div>
-          
+
+          {/* Network Info */}
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '1rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151'
+          }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>Connection Details</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Internet Provider</div>
+                <div style={{ fontWeight: '600' }}>{networkInfo.isp}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Connection Type</div>
+                <div style={{ fontWeight: '600' }}>{networkInfo.type}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Location</div>
+                <div style={{ fontWeight: '600' }}>{networkInfo.location}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>IP Address</div>
+                <div style={{ fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' }}>{networkInfo.ip}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+          {/* Historical Performance */}
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '1rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0' }}>Performance History</h3>
+              <select 
+                value={selectedMetric}
+                onChange={(e) => setSelectedMetric(e.target.value)}
+                style={{
+                  background: '#374151',
+                  border: '1px solid #4b5563',
+                  borderRadius: '0.5rem',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  color: 'white'
+                }}
+              >
+                <option value="download">Download Speed</option>
+                <option value="upload">Upload Speed</option>
+                <option value="latency">Latency</option>
+              </select>
+            </div>
+            <div style={{ height: '250px' }}>
+              {testHistory && testHistory.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={testHistory.slice().reverse()}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="time" 
+                      stroke="#9CA3AF"
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis stroke="#9CA3AF" tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F2937', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px',
+                        color: 'white'
+                      }} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey={selectedMetric} 
+                      stroke="#3B82F6" 
+                      strokeWidth={2}
+                      dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                  No data available. Run some speed tests to see history.
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* ISP Rankings */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Top ISPs by Download Speed</h2>
-            
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topISPs}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis label={{ value: 'Mbps', angle: -90, position: 'insideLeft' }} />
-                <Tooltip formatter={(value) => [`${value} Mbps`]} />
-                <Legend />
-                <Bar dataKey="downloadAvg" name="Download Speed" fill="#3B82F6" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '1rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+              <Award size={20} color="#facc15" />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0' }}>ISP Rankings</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {ispRankings.map((isp, index) => (
+                <div 
+                  key={isp.name} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '0.75rem', 
+                    background: 'rgba(55, 65, 81, 0.3)', 
+                    borderRadius: '0.5rem' 
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      width: '2rem',
+                      height: '2rem',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.875rem',
+                      fontWeight: 'bold',
+                      background: index === 0 ? '#facc15' : 
+                                 index === 1 ? '#9ca3af' : 
+                                 index === 2 ? '#f59e0b' : '#4b5563',
+                      color: index < 3 ? 'black' : 'white'
+                    }}>
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '600' }}>{isp.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{isp.region}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: '600' }}>{isp.avgSpeed} Mbps</div>
+                    <div style={{ fontSize: '0.75rem', color: '#4ade80' }}>{isp.reliability}% reliable</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+
+        {/* Performance Heatmap */}
+        <div style={{ 
+          background: 'rgba(30, 41, 59, 0.3)', 
+          backdropFilter: 'blur(10px)', 
+          borderRadius: '1rem', 
+          padding: '1.5rem', 
+          border: '1px solid #374151',
+          marginBottom: '2rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            <Clock size={20} color="#3b82f6" />
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0' }}>Best & Worst Times</h3>
+            <p style={{ fontSize: '0.875rem', color: '#94a3b8', margin: '0 0 0 1rem' }}>Peak performance hours analysis</p>
+          </div>
+          
+          {/* Hour labels */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+            {Array.from({length: 24}, (_, i) => (
+              <div key={i} style={{ textAlign: 'center' }}>
+                {i % 4 === 0 ? `${i}:00` : ''}
+              </div>
+            ))}
+          </div>
+          
+          {/* Heatmap */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem' }}>
+            {heatmapHours.map((data, index) => (
+              <div
+                key={index}
+                style={{
+                  aspectRatio: '1',
+                  borderRadius: '2px',
+                  background: `rgba(59, 130, 246, ${data.intensity * 0.8 + 0.1})`,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.75rem',
+                  fontWeight: '500'
+                }}
+                title={`${data.hour}:00 - ${data.speed.toFixed(0)} Mbps`}
+              >
+                {data.hour % 6 === 0 ? data.hour : ''}
+              </div>
+            ))}
+          </div>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
+            <span>Hours of the day (0-23)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>Slower</span>
+              <div style={{ display: 'flex', gap: '2px' }}>
+                {[0.1, 0.3, 0.5, 0.7, 0.9].map(opacity => (
+                  <div
+                    key={opacity}
+                    style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '2px',
+                      background: `rgba(59, 130, 246, ${opacity})`
+                    }}
+                  />
+                ))}
+              </div>
+              <span>Faster</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '0.75rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa', marginBottom: '0.5rem' }}>
+              {testHistory.length ? (testHistory.reduce((acc, test) => acc + test.download, 0) / testHistory.length).toFixed(1) : '0'}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Average Download (Mbps)</div>
+          </div>
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '0.75rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#4ade80', marginBottom: '0.5rem' }}>
+              {testHistory.length}
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Tests Completed</div>
+          </div>
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '0.75rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#facc15', marginBottom: '0.5rem' }}>
+              {testHistory.length ? Math.min(...testHistory.map(t => t.latency)).toFixed(0) : '0'}ms
+            </div>
+            <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Best Latency</div>
+          </div>
+          <div style={{ 
+            background: 'rgba(30, 41, 59, 0.3)', 
+            backdropFilter: 'blur(10px)', 
+            borderRadius: '0.75rem', 
+            padding: '1.5rem', 
+            border: '1px solid #374151',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7', marginBottom: '0.5rem' }}>98.5%</div>
+            <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Uptime Score</div>
+          </div>
+        </div>
+      </main>
     </div>
   );
-}
+};
+
+export default NETPULSE;
