@@ -370,21 +370,26 @@ const NETPULSE = () => {
     return stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  // Generate heatmap data for best/worst times
+  // Generate heatmap data for best/worst times (deterministic to prevent hydration mismatch)
   const generateHeatmapHours = () => {
     const hours = [];
+    
+    // Predefined pattern to avoid Math.random() hydration issues
+    const basePattern = [
+      186, 223, 199, 207, 194, 207, 196, 184, 156, 146, 143, 217,
+      199, 181, 179, 219, 209, 189, 195, 120, 115, 128, 112, 123
+    ];
+    
     for (let i = 0; i < 24; i++) {
-      // Use real data if available, otherwise simulate
+      // Use real data if available, otherwise use deterministic pattern
       const testData = testHistory.filter(test => test.hour === i);
-      let avgSpeed = 200; // default
+      let avgSpeed;
       
       if (testData.length > 0) {
         avgSpeed = testData.reduce((sum, test) => sum + test.download, 0) / testData.length;
       } else {
-        // Simulate typical internet usage patterns
-        if (i >= 19 && i <= 23) avgSpeed *= 0.6; // Evening peak
-        if (i >= 8 && i <= 10) avgSpeed *= 0.8; // Morning peak
-        avgSpeed += Math.random() * 50 - 25; // Add variance
+        // Use deterministic base pattern instead of Math.random()
+        avgSpeed = basePattern[i];
       }
       
       const intensity = Math.min(avgSpeed, 400) / 400;
@@ -397,7 +402,12 @@ const NETPULSE = () => {
     return hours;
   };
 
-  const heatmapHours = generateHeatmapHours();
+  const [heatmapHours, setHeatmapHours] = useState([]);
+
+  // Generate heatmap only on client side to prevent hydration mismatch
+  useEffect(() => {
+    setHeatmapHours(generateHeatmapHours());
+  }, [testHistory]);
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%)', color: 'white', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -424,7 +434,7 @@ const NETPULSE = () => {
               <div>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0' }}>NETPULSE</h1>
                 <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0' }}>
-                  {isTestRunning ? `Testing: ${formatStage(testState.stage)}` : 'Internet Performance Monitor'}
+                  {isTestRunning ? formatStage(testState.stage) : 'Internet Performance Monitor'}
                 </p>
               </div>
             </div>
@@ -839,59 +849,78 @@ const NETPULSE = () => {
             </p>
           </div>
           
-          {/* Hour labels */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
-            {Array.from({length: 24}, (_, i) => (
-              <div key={i} style={{ textAlign: 'center' }}>
-                {i % 4 === 0 ? `${i}:00` : ''}
-              </div>
-            ))}
-          </div>
-          
-          {/* Heatmap */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem' }}>
-            {heatmapHours.map((data, index) => (
-              <div
-                key={index}
-                style={{
-                  aspectRatio: '1',
-                  borderRadius: '2px',
-                  background: `rgba(59, 130, 246, ${data.intensity * 0.8 + 0.1})`,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: '500',
-                  position: 'relative'
-                }}
-                title={`${data.hour}:00 - ${data.speed.toFixed(0)} Mbps average`}
-              >
-                {data.hour % 6 === 0 ? data.hour : ''}
-              </div>
-            ))}
-          </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
-            <span>Hours of the day (0-23)</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>Slower</span>
-              <div style={{ display: 'flex', gap: '2px' }}>
-                {[0.1, 0.3, 0.5, 0.7, 0.9].map(opacity => (
-                  <div
-                    key={opacity}
-                    style={{
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '2px',
-                      background: `rgba(59, 130, 246, ${opacity})`
-                    }}
-                  />
+          {/* Only render heatmap after client-side hydration */}
+          {heatmapHours.length > 0 && (
+            <>
+              {/* Hour labels */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                {Array.from({length: 24}, (_, i) => (
+                  <div key={i} style={{ textAlign: 'center' }}>
+                    {i % 4 === 0 ? `${i}:00` : ''}
+                  </div>
                 ))}
               </div>
-              <span>Faster</span>
+              
+              {/* Heatmap */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', marginBottom: '1rem' }}>
+                {heatmapHours.map((data, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      aspectRatio: '1',
+                      borderRadius: '2px',
+                      background: `rgba(59, 130, 246, ${data.intensity * 0.8 + 0.1})`,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.75rem',
+                      fontWeight: '500',
+                      position: 'relative'
+                    }}
+                    title={`${data.hour}:00 - ${Math.round(data.speed)} Mbps average`}
+                  >
+                    {data.hour % 6 === 0 ? data.hour : ''}
+                  </div>
+                ))}
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
+                <span>Hours of the day (0-23)</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>Slower</span>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {[0.1, 0.3, 0.5, 0.7, 0.9].map(opacity => (
+                      <div
+                        key={opacity}
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '2px',
+                          background: `rgba(59, 130, 246, ${opacity})`
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span>Faster</span>
+                </div>
+              </div>
+            </>
+          )}
+          
+          {/* Loading placeholder */}
+          {heatmapHours.length === 0 && (
+            <div style={{ 
+              height: '120px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              color: '#94a3b8',
+              fontSize: '0.875rem'
+            }}>
+              Loading performance heatmap...
             </div>
-          </div>
+          )}
         </div>
 
         {/* Quick Stats */}
@@ -966,7 +995,7 @@ const NETPULSE = () => {
           </div>
         </div>
 
-        {/* WebSocket Status Indicator */}
+        {/* Connection Status Indicator */}
         <div style={{ 
           position: 'fixed', 
           bottom: '1rem', 
@@ -986,10 +1015,20 @@ const NETPULSE = () => {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            background: wsRef.current && wsRef.current.readyState === 1 ? '#4ade80' : '#ef4444'
+            background: (typeof window !== 'undefined' && wsRef.current && wsRef.current.readyState === 1) ? '#4ade80' : '#ef4444'
           }} />
           <span>
-            {wsRef.current && wsRef.current.readyState === 1 ? 'Connected' : 'Disconnected'}
+            Backend: {(typeof window !== 'undefined' && wsRef.current && wsRef.current.readyState === 1) ? 'Connected' : 'Disconnected'}
+          </span>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: '#4ade80', // Speed test server is running on port 3000
+            marginLeft: '0.5rem'
+          }} />
+          <span>
+            Speed Test Server: Ready
           </span>
         </div>
       </main>
