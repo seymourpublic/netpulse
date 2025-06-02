@@ -80,7 +80,7 @@ const NETPULSE = () => {
   const [apiConnected, setApiConnected] = useState(false);
 
   // Ports configuration - detect current port and use API server port
-  const CURRENT_PORT = '3001';
+  const CURRENT_PORT = '3000';
   const API_PORT = 5000;
   const API_BASE_URL = `http://localhost:${API_PORT}`;
   
